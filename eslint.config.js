@@ -1,0 +1,30 @@
+module.exports = [
+	{
+		files: ['uoregions.js'],
+		languageOptions: {
+			ecmaVersion: 'latest',
+			sourceType: 'script',
+		},
+		rules: {
+			'no-dupe-keys': 'error',
+			'no-dupe-args': 'error',
+			'no-dupe-else-if': 'error',
+			'no-duplicate-case': 'error',
+			'no-unreachable': 'error',
+			'no-fallthrough': 'error',
+			'no-self-assign': 'error',
+			'no-self-compare': 'error',
+			'no-empty-pattern': 'error',
+			'no-cond-assign': ['error', 'always'],
+			'no-constant-condition': ['error', { checkLoops: false }],
+			'no-control-regex': 'error',
+			'no-irregular-whitespace': 'error',
+			'no-misleading-character-class': 'error',
+			'no-sparse-arrays': 'error',
+			'no-unsafe-negation': 'error',
+			'no-unsafe-finally': 'error',
+			'use-isnan': 'error',
+			'valid-typeof': 'error',
+		},
+	},
+];

@@ -1,0 +1,96 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  format-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: lts/*
+
+      - name: Check formatting
+        run: npx --yes prettier@3 --check '**/*.{html,css,js,json,md,yml}'
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: lts/*
+
+      - name: Lint
+        run: ci/lint.sh
+
+  pages-dry-run:
+    if: github.event_name == 'pull_request'
+    needs: [format-check, lint]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/checkout@v6
+        with:
+          repository: draxinar/rundir
+          path: rundir
+
+      - name: Stage Pages artifact
+        run: ci/stage-pages.sh
+
+      - name: Verify staged contents
+        run: |
+          test -f _site/index.html
+          test -f _site/style.css
+          test -f _site/uoregions.js
+          test -f _site/map.png
+          test -f _site/CNAME
+          test -f _site/rundir/tiledata.mul
+          test -f _site/rundir/bank/templatestable.dat
+          test -f _site/rundir/uogolddemo/regions.txt
+          test -f _site/rundir/uogolddemo/dynamic0.mul
+          test -f _site/rundir/uogolddemo/dynidx0.mul
+
+  deploy:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [format-check, lint]
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/checkout@v6
+        with:
+          repository: draxinar/rundir
+          path: rundir
+
+      - name: Stage Pages artifact
+        run: ci/stage-pages.sh
+
+      - uses: actions/configure-pages@v6
+
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: _site
+
+      - id: deployment
+        uses: actions/deploy-pages@v5

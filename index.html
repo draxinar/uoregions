@@ -1,0 +1,419 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<meta
+			http-equiv="Content-Security-Policy"
+			content="default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'"
+		/>
+		<title>UO Region Editor</title>
+		<link rel="stylesheet" href="style.css" />
+	</head>
+	<body>
+		<div id="toolbar">
+			<button type="button" id="btn-load" title="Load regions.txt (Ctrl+O)">
+				Load
+			</button>
+			<input
+				type="file"
+				id="file-input"
+				accept=".txt,.mul,.idx"
+				multiple
+				hidden
+			/>
+			<button
+				type="button"
+				id="btn-save"
+				title="Save regions.txt (Ctrl+S)"
+				disabled
+			>
+				Save
+			</button>
+			<button type="button" id="btn-clear" title="Remove all regions" disabled>
+				Clear
+			</button>
+			<div class="tool-sep"></div>
+			<button type="button" id="btn-undo" title="Undo (Ctrl+Z)" disabled>
+				Undo
+			</button>
+			<button type="button" id="btn-redo" title="Redo (Ctrl+Shift+Z)" disabled>
+				Redo
+			</button>
+			<div class="tool-sep"></div>
+			<div class="dropdown" id="new-dropdown">
+				<button type="button" id="btn-new" title="Create new region" disabled>
+					New Region
+				</button>
+				<div id="template-menu" class="dropdown-menu"></div>
+			</div>
+			<div class="tool-sep"></div>
+			<label class="tool-check"
+				>Group:
+				<select id="sel-group">
+					<option value="none">None</option>
+					<option value="name">By Name</option>
+					<option value="bbox">By BBox</option>
+				</select>
+			</label>
+			<label class="tool-check"
+				><input type="checkbox" id="chk-labels" /> Labels</label
+			>
+			<label class="tool-check"
+				><input type="checkbox" id="chk-heatmap" /> Density</label
+			>
+			<div class="tool-sep"></div>
+			<button
+				type="button"
+				id="btn-regions"
+				title="Toggle region panels"
+				class="active"
+			>
+				Regions
+			</button>
+			<button
+				type="button"
+				id="btn-dynamic"
+				title="Toggle dynamic entity panels"
+			>
+				Dynamic
+			</button>
+			<div class="tool-sep"></div>
+			<button
+				type="button"
+				id="btn-region-diff"
+				title="Show region changes since last load"
+				disabled
+			>
+				Region Diff
+			</button>
+			<button
+				type="button"
+				id="btn-entity-diff"
+				title="Show entity changes since last load"
+				disabled
+			>
+				Entity Diff
+			</button>
+			<button type="button" id="btn-validate" title="Validate regions" disabled>
+				Validate
+			</button>
+			<div class="tool-spacer"></div>
+			<button type="button" id="btn-fit" title="Fit map to view (F)">
+				Fit
+			</button>
+			<span class="tool-label" id="zoom-display">100%</span>
+		</div>
+
+		<div id="main">
+			<div id="sidebar">
+				<div id="region-list-panel" class="sidebar-panel">
+					<div class="panel-hdr">
+						<span>Region List</span
+						><button type="button" id="region-list-close" title="Close">
+							&times;
+						</button>
+					</div>
+					<input
+						type="text"
+						id="search-input"
+						placeholder="Filter regions..."
+					/>
+					<div id="region-list"></div>
+				</div>
+				<div id="dyn-panel" class="sidebar-panel" hidden>
+					<div class="panel-hdr">
+						<span>Dynamic Entities</span
+						><button type="button" id="dyn-panel-close" title="Close">
+							&times;
+						</button>
+					</div>
+					<input
+						type="text"
+						id="dyn-search"
+						placeholder="Filter items..."
+						autocomplete="off"
+					/>
+					<div id="dyn-list"></div>
+				</div>
+			</div>
+			<div id="canvas-wrap">
+				<canvas id="canvas"></canvas>
+				<div id="draw-hint">
+					Click and drag on the map to draw the region bounds. Press Escape to
+					cancel.
+				</div>
+			</div>
+			<div id="right-sidebar">
+				<div id="region-panel" class="sidebar-panel">
+					<div class="panel-hdr">
+						<span>Region Properties</span
+						><button type="button" id="props-close" title="Close">
+							&times;
+						</button>
+					</div>
+					<div id="props-empty">
+						No region selected
+						<div id="coverage-warn" hidden></div>
+					</div>
+					<div id="props-content" hidden>
+						<div class="prop-row">
+							<label>ID</label><input type="number" id="prop-id" step="1" />
+						</div>
+						<div class="prop-row">
+							<label>Name</label
+							><input type="text" id="prop-name" maxlength="39" /><select
+								id="prop-prefix-pick"
+								title="Pick prefix"
+							>
+								<option value=""></option>
+							</select>
+						</div>
+						<div class="prop-row">
+							<label>Desc</label
+							><input type="text" id="prop-desc" maxlength="39" />
+						</div>
+						<div class="prop-row">
+							<label>X</label>
+							<div class="prop-row-pair">
+								<input type="number" id="prop-x" step="1" />
+								<label>Y</label>
+								<input type="number" id="prop-y" step="1" />
+							</div>
+						</div>
+						<div class="prop-row">
+							<label>W</label>
+							<div class="prop-row-pair">
+								<input type="number" id="prop-w" step="1" min="1" />
+								<label>H</label>
+								<input type="number" id="prop-h" step="1" min="1" />
+							</div>
+						</div>
+						<div class="prop-row">
+							<label>zMin</label>
+							<div class="prop-row-pair">
+								<input type="number" id="prop-zmin" min="-127" max="127" />
+								<label>zMax</label>
+								<input type="number" id="prop-zmax" min="-127" max="127" />
+							</div>
+						</div>
+						<div class="prop-row">
+							<label>Flags</label
+							><input type="number" id="prop-flags" step="1" />
+						</div>
+						<div class="prop-row">
+							<label>Type</label>
+							<select id="prop-type"></select>
+						</div>
+						<div class="prop-row">
+							<label title="Music/season ID (0=none)">Music</label>
+							<select id="prop-f1" class="prop-music"></select>
+						</div>
+						<div class="prop-row">
+							<label title="Daytime ambient sound">Day</label>
+							<div class="prop-row-pair">
+								<input type="number" id="prop-f2" />
+								<label title="Nighttime ambient sound">Night</label>
+								<input type="number" id="prop-f3" />
+								<label title="Light level override (0=day/night cycle)"
+									>Light</label
+								>
+								<input type="number" id="prop-f4" />
+							</div>
+						</div>
+						<div id="prop-id-warn" class="prop-warn" hidden></div>
+						<div id="prop-overlap-warn" class="prop-warn" hidden></div>
+						<button type="button" id="btn-delete">Delete Region</button>
+						<div id="spawn-summary" hidden>
+							<h4>Spawns Here</h4>
+							<div id="spawn-list"></div>
+						</div>
+					</div>
+				</div>
+				<div id="diff-panel" class="sidebar-panel" hidden>
+					<div class="panel-hdr">
+						<span>Region Changes</span
+						><button type="button" id="diff-close" title="Close">
+							&times;
+						</button>
+					</div>
+					<div id="diff-content"></div>
+				</div>
+				<div id="dyn-props" class="sidebar-panel" hidden>
+					<div class="panel-hdr">
+						<span>Dynamic Properties</span
+						><button type="button" id="dyn-props-close" title="Close">
+							&times;
+						</button>
+					</div>
+					<div id="dyn-props-content"></div>
+				</div>
+				<div id="entity-diff-panel" class="sidebar-panel" hidden>
+					<div class="panel-hdr">
+						<span>Entity Changes</span
+						><button type="button" id="entity-diff-close" title="Close">
+							&times;
+						</button>
+					</div>
+					<div id="entity-diff-content"></div>
+				</div>
+			</div>
+		</div>
+
+		<div id="statusbar">
+			<span id="status-coords">Tile: -, -</span>
+			<span id="status-regions">No file loaded</span>
+			<span id="status-spawn"></span>
+			<span id="status-zoom">Zoom: 100%</span>
+			<span id="status-selected"></span>
+			<span id="status-bank"></span>
+			<span id="status-dynamic"></span>
+		</div>
+
+		<div id="spawn-picker" class="modal-overlay" hidden>
+			<div class="modal-box spawn-picker-box">
+				<h3>New Spawn Region</h3>
+				<div class="modal-row">
+					<label>Browse</label>
+					<select id="spawn-mode-sel">
+						<option value="creature">By Creature</option>
+						<option value="prefix">By Prefix</option>
+					</select>
+					<input
+						type="text"
+						id="spawn-search"
+						placeholder="Filter..."
+						autocomplete="off"
+					/>
+				</div>
+				<div id="spawn-creature-panel">
+					<div class="modal-row">
+						<label></label>
+						<select id="spawn-creature-sel" size="14"></select>
+					</div>
+					<div class="modal-row">
+						<label>Prefix</label>
+						<select id="spawn-prefix-sel"></select>
+						<button
+							type="button"
+							id="spawn-add-btn"
+							class="spawn-add-btn"
+							title="Add prefix to selection"
+						>
+							Add
+						</button>
+					</div>
+					<div id="spawn-picker-info"></div>
+				</div>
+				<div id="spawn-prefix-panel" hidden>
+					<div class="modal-row">
+						<label></label>
+						<select id="spawn-prefix-list" size="14" multiple></select>
+					</div>
+					<div class="modal-row">
+						<label></label>
+						<button
+							type="button"
+							id="spawn-prefix-add-btn"
+							class="spawn-add-btn"
+						>
+							Add Selected
+						</button>
+					</div>
+				</div>
+				<div id="spawn-selection">
+					<label class="spawn-sel-label">Selection</label>
+					<div id="spawn-sel-list"></div>
+				</div>
+				<div class="modal-buttons">
+					<button type="button" id="spawn-picker-ok">Draw Regions</button>
+					<button type="button" id="spawn-picker-cancel">Cancel</button>
+				</div>
+			</div>
+		</div>
+
+		<div id="ctx-menu" class="dropdown-menu"></div>
+		<div id="spawn-ctx"></div>
+
+		<div id="rename-prefix" class="modal-overlay" hidden>
+			<div class="modal-box rename-prefix-box">
+				<h3>Rename Prefix</h3>
+				<div class="modal-row">
+					<label>From</label>
+					<input type="text" id="rename-from" readonly />
+				</div>
+				<div class="modal-row">
+					<label>To</label>
+					<input
+						type="text"
+						id="rename-to"
+						placeholder="NEW_PREFIX_"
+						autocomplete="off"
+					/>
+					<select id="rename-pick" title="Pick existing prefix">
+						<option value="">…</option>
+					</select>
+				</div>
+				<div id="rename-preview"></div>
+				<div class="modal-buttons">
+					<button type="button" id="rename-ok" disabled>Rename</button>
+					<button type="button" id="rename-cancel">Cancel</button>
+				</div>
+			</div>
+		</div>
+
+		<div id="tmpl-detail" class="modal-overlay" hidden>
+			<div class="modal-box tmpl-detail-box">
+				<div id="tmpl-detail-content"></div>
+				<div class="modal-buttons">
+					<button type="button" id="tmpl-detail-close">Close</button>
+				</div>
+			</div>
+		</div>
+
+		<div id="validate-modal" class="modal-overlay" hidden>
+			<div class="modal-box validate-box">
+				<h3>Validation</h3>
+				<div id="validate-content"></div>
+				<div class="modal-buttons">
+					<button type="button" id="validate-close">Close</button>
+				</div>
+			</div>
+		</div>
+
+		<div id="tile-picker" class="modal-overlay" hidden>
+			<div class="modal-box tile-picker-box">
+				<h3>Pick Tile Type</h3>
+				<div class="modal-row" id="tile-cat-row" hidden>
+					<label>Add as</label>
+					<select id="tile-cat">
+						<option value="D">Item</option>
+						<option value="C">Container</option>
+						<option value="W">Wearable</option>
+					</select>
+				</div>
+				<div class="modal-row" id="tile-layer-row" hidden>
+					<label>Equip slot</label>
+					<select id="tile-layer"></select>
+				</div>
+				<div class="modal-row">
+					<input
+						type="text"
+						id="tile-search"
+						placeholder="Filter by name or ID..."
+						autocomplete="off"
+					/>
+				</div>
+				<div class="modal-row">
+					<select id="tile-list" size="16"></select>
+				</div>
+				<div id="tile-picker-info"></div>
+				<div class="modal-buttons">
+					<button type="button" id="tile-picker-ok">Use Tile</button>
+					<button type="button" id="tile-picker-cancel">Cancel</button>
+				</div>
+			</div>
+		</div>
+		<script src="uoregions.js"></script>
+	</body>
+</html>
