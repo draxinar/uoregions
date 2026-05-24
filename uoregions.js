@@ -735,14 +735,14 @@ function spawnCategory(s) {
 	return 'npc';
 }
 
-function spawnTotals(spawns, area) {
+function spawnTotals(spawns, area, regionName) {
 	let npcs = 0,
 		shopkeepers = 0,
 		guards = 0,
 		items = 0,
 		other = 0;
 	for (const s of spawns) {
-		const c = spawnCount(area, s.count, isNoWander(s));
+		const c = spawnCount(area, s.count, regionName);
 		// group spawns (createsnpcs, e.g. Undead Group) place several
 		// NPC members each - count the members, not the single group
 		if (s.createsNpcs && s.memberCount > 0) {
@@ -782,7 +782,7 @@ function spawnTotals(spawns, area) {
  *  panel stat and the heatmap. */
 function regionNpcDensity(r) {
 	const area = r.w * r.h;
-	const count = spawnTotals(getSpawnsForRegion(r.name), area).npcs;
+	const count = spawnTotals(getSpawnsForRegion(r.name), area, r.name).npcs;
 	return { count, perK: area > 0 ? (count / area) * 1000 : 0 };
 }
 
@@ -812,15 +812,20 @@ function compactSpawnBadge(t) {
 	return parts.length > 0 ? parts.join('+') : '0';
 }
 
-/** Matches CResBankRegion_SpawnInSubRegion density cap (resbank.c:3276-3293).
- *  noWander is true for SHOPKEEPER templates in city resbank regions
- *  (resbank.c:3565, 5156-5157). */
-function spawnCount(area, regionLimit, noWander) {
-	if (regionLimit > 0) return regionLimit;
-	const areaCount = Math.floor(area / 2560);
-	if (areaCount > 0) return areaCount;
-	if (noWander) return 1;
-	return 0;
+/** Matches CResBankRegion_SpawnInSubRegion (resbank.c, 0x004AFC4B):
+ *  count = regionlimit (scalingWts) by default; overridden to
+ *  area/2560 when the sub-region's name contains the "SCALING"
+ *  substring (the level-editor's opt-in marker for area-scaled
+ *  density); floored at 1 to close the binary's count==0 fall-
+ *  through where small SCALING boxes would otherwise spawn
+ *  unboundedly. regionName is required. */
+function spawnCount(area, regionLimit, regionName) {
+	let count = regionLimit > 0 ? regionLimit : 0;
+	if (regionName.indexOf('SCALING') !== -1) {
+		count = Math.floor(area / 2560);
+	}
+	if (count < 1) count = 1;
+	return count;
 }
 
 /** True when the server would pass noWander=1 to SpawnInSubRegion.
@@ -850,7 +855,7 @@ function updateSpawnStatus() {
 	for (const r of S.regions) {
 		const spawns = getSpawnsForRegion(r.name);
 		const area = r.w * r.h;
-		const t = spawnTotals(spawns, area);
+		const t = spawnTotals(spawns, area, r.name);
 		npcs += t.npcs;
 		shopkeepers += t.shopkeepers;
 		guards += t.guards;
@@ -1140,7 +1145,7 @@ function drawRegionsNormal(dpr) {
 			const spawns = getSpawnsForRegion(r.name);
 			if (spawns.length > 0) {
 				const area = r.w * r.h;
-				const t = spawnTotals(spawns, area);
+				const t = spawnTotals(spawns, area, r.name);
 				drawDensityBadge(r.x, r.y + r.h, t);
 			}
 		}
@@ -1210,7 +1215,7 @@ function drawRegionsBbox(dpr) {
 			const spawns = getSpawnsForRegion(r.name);
 			if (spawns.length > 0) {
 				const area = r.w * r.h;
-				const t = spawnTotals(spawns, area);
+				const t = spawnTotals(spawns, area, r.name);
 				drawDensityBadge(r.x, r.y + r.h, t);
 			}
 		}
@@ -1301,13 +1306,15 @@ function drawNewRect(dpr) {
 	ctx.setLineDash([6 / S.zoom, 4 / S.zoom]);
 	ctx.strokeRect(x, y, w, h);
 	ctx.setLineDash([]);
-	// dimension label + per-template spawn capacity (assuming regionlimit=0)
-	// Matches spawnCount() / CResBankRegion_SpawnInSubRegion (resbank.c:3266-3276)
+	// dimension label + per-template spawn capacity (area / 2560).
+	// Matches spawnCount() / CResBankRegion_SpawnInSubRegion (0x004AFC4B).
 	const fs = 12 / S.zoom;
 	ctx.font = `${fs}px monospace`;
 	ctx.fillStyle = '#fff';
 	const area = Math.round(w) * Math.round(h);
-	const cap = spawnCount(area, 0, false);
+	// Force the area-cap branch with a synthetic SCALING name so the
+	// label always reads area/2560, independent of any regionlimit.
+	const cap = spawnCount(area, 0, 'SCALING');
 	ctx.fillText(
 		`${Math.round(w)} \u00d7 ${Math.round(h)}  \u2014  ${cap}/tmpl`,
 		x + 3 / S.zoom,
@@ -2362,7 +2369,7 @@ function makeListItem(r, idx, isChild) {
 		const spawns = getSpawnsForRegion(r.name);
 		if (spawns.length > 0) {
 			const area = r.w * r.h;
-			const t = spawnTotals(spawns, area);
+			const t = spawnTotals(spawns, area, r.name);
 			const tip = formatSpawnTotals(t, spawns.length);
 			html += `<span class="rdensity" title="${tip}">[${compactSpawnBadge(t)}]</span>`;
 		}
@@ -2711,7 +2718,7 @@ function updateSpawnSummary() {
 	panel.hidden = false;
 	list.innerHTML = '';
 	const area = r.w * r.h;
-	const t = spawnTotals(spawns, area);
+	const t = spawnTotals(spawns, area, r.name);
 	const hdr = document.createElement('div');
 	hdr.className = 'spawn-total';
 	hdr.textContent = formatSpawnTotals(t, spawns.length);
@@ -2720,7 +2727,7 @@ function updateSpawnSummary() {
 	dens.className = 'spawn-density';
 	dens.textContent = formatNpcDensity(regionNpcDensity(r));
 	list.appendChild(dens);
-	for (const s of spawns) list.appendChild(makeSpawnRow(s, area));
+	for (const s of spawns) list.appendChild(makeSpawnRow(s, area, r.name));
 }
 
 function updateSpawnTree(panel, list, peerIndices) {
@@ -2759,14 +2766,14 @@ function updateSpawnTree(panel, list, peerIndices) {
 			dens.className = 'spawn-density spawn-tree-child';
 			dens.textContent = formatNpcDensity(regionNpcDensity(r));
 			list.appendChild(dens);
-			const t = spawnTotals(spawns, area);
+			const t = spawnTotals(spawns, area, r.name);
 			grandNpcs += t.npcs;
 			grandShopkeepers += t.shopkeepers;
 			grandGuards += t.guards;
 			grandItems += t.items;
 			grandOther += t.other;
 			for (const s of spawns) {
-				const row = makeSpawnRow(s, area);
+				const row = makeSpawnRow(s, area, r.name);
 				row.classList.add('spawn-tree-child');
 				list.appendChild(row);
 			}
@@ -2792,10 +2799,10 @@ function updateSpawnTree(panel, list, peerIndices) {
 	else panel.hidden = false;
 }
 
-function makeSpawnRow(s, area) {
+function makeSpawnRow(s, area, regionName) {
 	const isGroup = s.createsNpcs && s.memberCount > 0;
 	const base =
-		area != null ? spawnCount(area, s.count, isNoWander(s)) : s.count;
+		area != null ? spawnCount(area, s.count, regionName) : s.count;
 	// group rows read "<instances>x<members per group>" (e.g. 1x5);
 	// plain rows read "x<count>"
 	const countText = isGroup ? `${base}×${s.memberCount}` : `×${base}`;
@@ -3320,11 +3327,7 @@ function showSpawnBudget(templateId) {
 				row.className = 'budget-region';
 				// Per-template cap matching CResBankRegion_SpawnInSubRegion (resbank.c:3266-3276)
 				const area = m.r.w * m.r.h;
-				const nw =
-					tmpl.typeName &&
-					tmpl.typeName.toUpperCase() === 'SHOPKEEPER' &&
-					prefix.toUpperCase().startsWith('CITY');
-				const cap = spawnCount(area, limit, nw);
+				const cap = spawnCount(area, limit, m.r.name);
 				row.innerHTML =
 					`<span class="br-name">${esc(m.r.name)}</span>` +
 					`<span class="br-cap">${m.r.w}\u00d7${m.r.h} [${cap}]</span>`;
